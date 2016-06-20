@@ -1,7 +1,7 @@
-<?
+<?php
 /*
  * Barcode Encoder tool
- * (C) 2008, Eric Stern
+ * Original (C) 2008, Eric Stern
  * http://www.firehed.net, http://www.eric-stern.com
  *
  * This code may be re-used or re-distributed in any application, commercial
@@ -10,7 +10,7 @@
  */
 
 
-class barcode {
+class Code39 {
 	protected static $code39 = array(
 	'0' => 'bwbwwwbbbwbbbwbw','1' => 'bbbwbwwwbwbwbbbw',
 	'2' => 'bwbbbwwwbwbwbbbw','3' => 'bbbwbbbwwwbwbwbw',
@@ -35,22 +35,48 @@ class barcode {
 	'$' => 'bwwwbwwwbwwwbwbw','/' => 'bwwwbwwwbwbwwwbw',
 	'+' => 'bwwwbwbwwwbwwwbw','%' => 'bwbwwwbwwwbwwwbw');
 
+	private $text;
 
-	public static function code39($text, $height = 50, $widthScale = 1) {
+
+	/**
+	 * Code39 constructor.
+	 * @param String $text The text of the content of the barcode.  Any alpha characters will be capitalized.  Astericks
+	 * 			will be appended to the front and end of the string.
+	 * @throws BarcodeException "Invalid text input."  The only valid inputs are [A-Z0-9-. $+\/%]
+	 */
+	public function __construct($text)
+	{
+		$text = strtoupper($text); // *UPPERCASE TEXT*
+
 		if (!preg_match('/^[A-Z0-9-. $+\/%]+$/i', $text)) {
-			throw new Exception('Invalid text input.');
+			throw new BarcodeException('Invalid text input.');
 		}
-		
-		$text = '*' . strtoupper($text) . '*'; // *UPPERCASE TEXT*
-		$length = strlen($text);
 
-		$barcode = imageCreate($length * 16 * $widthScale, $height);
+		$this->text = '*' . $text . '*';
+	}
+
+
+	/**
+	 * @return string The text of the content of the barcode.
+	 */
+	public function __toString()
+	{
+		return $this->text;
+	}
+
+
+	/**
+	 * @param int $height
+	 * @param int $widthScale
+	 */
+	protected function renderImage($height = 50, $widthScale = 1) {
+		$barcode = imagecreate(strlen($this->text) * 16 * $widthScale, $height);
 
 		$bg = imagecolorallocate($barcode, 255, 255, 0); //sets background to yellow
 		imagecolortransparent($barcode, $bg); //makes that yellow transparent
 		$black = imagecolorallocate($barcode, 0, 0, 0); //defines a color for black
 
-		$chars = str_split($text);
+		$chars = str_split($this->text);
 
 		$colors = '';
 
@@ -61,19 +87,37 @@ class barcode {
 		foreach (str_split($colors) as $i => $color) {
 			if ($color == 'b') {
 				// imageLine($barcode, $i, 0, $i, $height-13, $black);
-				imageFilledRectangle($barcode, $widthScale * $i, 0, $widthScale * ($i+1) -1 , $height-13, $black);
+				imagefilledrectangle($barcode, $widthScale * $i, 0, $widthScale * ($i+1) -1 , $height-13, $black);
 			}
 		}
 
 		//16px per bar-set, halved, minus 6px per char, halved (5*length)
 		// $textcenter = $length * 5 * $widthScale;
-		$textcenter = ($length * 8 * $widthScale) - ($length * 3);
+		$textcenter = (strlen($this->text) * 8 * $widthScale) - (strlen($this->text) * 3);
 		
-		imageString($barcode, 2, $textcenter, $height-13, $text, $black);
+		imagestring($barcode, 2, $textcenter, $height-13, $this->text, $black);
 
-		header('Content-type: image/png');
-		imagePNG($barcode);
-		imageDestroy($barcode);
-		exit;
-	} // function code39
-} // class barcode
+//		header('Content-type: image/png');
+		imagepng($barcode);
+		imagedestroy($barcode);
+	}
+
+
+	public function toDataUrl($height = 50, $widthScale = 1) {
+		ob_start();
+		$this->renderImage($height, $widthScale);
+		$data = ob_get_contents();
+		ob_end_clean();
+		return 'data:image/png;base64,' . base64_encode($data);
+	}
+
+
+	public function toHtmlTag($height = 50, $widthScale = 1) {
+		$dataUrl = $this->toDataUrl($height, $widthScale);
+		echo "<img src=\"$dataUrl\" />";
+	}
+}
+
+class BarcodeException extends Exception {
+
+}
